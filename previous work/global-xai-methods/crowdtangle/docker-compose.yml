@@ -1,0 +1,15 @@
+version: "3.3"
+
+services:
+  app_server:
+    image: crowdtangle
+    build: .
+    ports:
+      - "8888:8888"
+      - "6006:6006"
+      - "6007:6007"
+    volumes:
+      - "./:/home/jovyan"
+    environment:
+      - NB_UID=1017
+    user: root

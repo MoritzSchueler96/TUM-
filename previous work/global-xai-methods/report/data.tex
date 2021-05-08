@@ -1,0 +1,26 @@
+%!TEX root = ../main.tex
+\section{Data}
+\label{sec:data}
+%\todo{Camilo: Describe Organic dataset}
+The organic dataset is a collection of multilingual text corpora composed of opinions from diverse websites and forums around organic-food-related topics stored in .csv and json files.
+A small part the corpus has been enriched by human tagged information about the aspects, entities, and sentiment of each sentence. We refer to this corpus as the annotated dataset and a detailed description of its annotations can be found in the original repository \cite{original_repo}. The additional information can be used for different purposes such as:  calculating salience, polarity analysis or sentiment analysis, and to compare supervised or semi-supervised with unsupervised approaches.\\
+In general, each comment can be subdivided in sentences, and each sentence could be interpreted as a sequence of tokens. \cref{Table:data_statistics} depicts some relevant information about the English and German datasets in terms of sentences and tokens. These statistics, as well as our whole proceedings consider only the relevant comments, namely the comments which are related to the topics food or ideally organic food; those comments are tagged in the JSON structure with the value of one at the key: "relevant".
+\begin{center}
+    \begin{table}
+    \centering
+        \begin{tabular}{lll}
+             \toprule
+             & English & German  \\
+             \midrule
+             Number of sentences & 441895 & 487794 \\
+             Number of comments & 140119 & 94442 \\
+             Portion of biased (\%) & 0.465 & 0.026\\ 
+             Number of tokens & 7198582 & 7752885 \\
+             Size of vocabulary & 141579 & 262672\\
+             \bottomrule
+        \end{tabular}
+        \caption{Statistics for the raw organic dataset (Only relevant comments considered)}
+        \label{Table:data_statistics}
+    \end{table}
+\end{center}
+The organic data set is separated in two subgroups: biased and unbiased. The biased corpus contains documents from social media sources which are expected to have a marked homogeneous tendency towards  certain opinions (e.g. \url{www.organicauthority.com} contains mainly positive opinions towards organic food, and is therefore assigned to the the biased subgroup). For a more detailed description of the data, you can refer to the original repository \cite{original_repo}.

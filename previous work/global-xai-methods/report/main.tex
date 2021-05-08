@@ -1,0 +1,131 @@
+\documentclass[a4paper, 11pt]{article}
+\usepackage{psfrag,amsbsy,graphics,float,amsmath}
+\usepackage[english]{babel}
+
+\usepackage{wrapfig}
+\usepackage{verbatim} 
+\usepackage{bm}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref} 
+\usepackage{natbib}
+\usepackage{pdfpages}
+\usepackage[toc,page]{appendix}
+
+\usepackage[english]{babel}
+\usepackage{blindtext}
+
+\usepackage[capitalise]{cleveref}  
+\usepackage{subcaption}
+
+\usepackage{listings}
+%%\usepackage{minted}
+
+
+%---------------------------------------------------------------------------------
+% Additional settings
+%---------------------------------------------------------------------------------
+
+%---------------------------------------------------------------------------------
+% Define your margins
+\usepackage{geometry} % Necessary package for defining margins
+
+\geometry{
+	top=2cm, % Defines top margin
+	bottom=2cm, % Defines bottom margin
+	left=2.2cm, % Defines left margin
+	right=2.2cm, % Defines right margin
+	includehead, % Includes space for a header
+	%includefoot, % Includes space for a footer
+	%showframe, % Uncomment if you want to show how it looks on the page 
+}
+
+\setlength{\parindent}{15pt} % Adjust to set you indent globally 
+
+%---------------------------------------------------------------------------------
+% Define your spacing
+\usepackage{setspace} % Required for spacing
+% Two options:
+\linespread{1.5}
+%\onehalfspacing % one-half-spacing linespread
+
+%----------------------------------------------------------------------------------------
+% Define your fonts
+\usepackage[T1]{fontenc} % Output font encoding for international characters
+\usepackage[utf8]{inputenc} % Required for inputting international characters
+
+%%\usepackage{XCharter} % Use the XCharter font
+\usepackage[font=small,labelfont=bf]{caption}
+
+
+%---------------------------------------------------------------------------------
+% Define your headers and footers
+\setlength{\headheight}{14pt}
+\usepackage{fancyhdr} % Package is needed to define header and footer
+\pagestyle{fancy} % Allows you to customize the headers and footers
+
+%\renewcommand{\sectionmark}[1]{\markboth{#1}{}} % Removes the section number from the header when \leftmark is used
+
+% Headers
+\lhead{} % Define left header
+\chead{\textit{}} % Define center header - e.g. add your paper title
+\rhead{} % Define right header
+
+% Footers
+\lfoot{} % Define left footer
+\cfoot{\footnotesize \thepage} % Define center footer
+\rfoot{ } % Define right footer
+
+%----------------Commands--------------------------
+\newcommand{\bp}[2]{\bm{#1(}#2\bm{)}}
+
+%---------------------------------------------------------------------------------
+
+\begin{document}
+\setcounter{page}{1}
+\thispagestyle{empty}
+\includepdf[pages=1,pagecommand={}]{titlepage/titlepage.pdf}
+
+\begin{abstract}
+Conspiracy theories are spreading. Especially during the COVID-19 pandemic. To get a
+deeper understanding about the impact of those theories we use machine learning techniques
+to predict whether a text has high  influence in the conspiracy theory audience. Using 
+CrowdTangle, a tool to crawl posts made on Facebook, we create two datasets containing 
+posts from conspiracy theorists. We define a metric to measure the impact a post has and
+let two models based on neural networks predict this variable for  each post. A brief
+insight of explainability methods - which can be used to make a  complex neural
+model comprehensible for humans - is given. In this case this could help to understand 
+how posts with high impact look like.
+\end{abstract}
+
+%_________TOC__________________________
+\tableofcontents
+\newpage
+
+%_________Introduction__________________________________
+\input{chapters/01_introduction.tex}
+\input{chapters/02_related_work.tex}
+
+%_________Main Content__________________________________
+%%\input{chapters/03_background.tex}
+\input{chapters/04_dataset.tex}
+\input{chapters/05_experiments.tex}
+
+ 
+
+%_____Discussion, Conclusion_________________________________
+
+\input{chapters/06_conclusion.tex}
+
+
+%_____Future Work_________________________________
+\input{chapters/07_future_work.tex}
+
+%_____References_________________________________
+%%\newpage
+\bibliographystyle{abbrvnat}
+\bibliography{library}
+\addcontentsline{toc}{section}{Bibliography} 
+
+%__________________________________________________________
+\end{document}

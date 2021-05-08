@@ -1,0 +1,46 @@
+%!TEX root = ../main.tex
+\section{Discussion, Limitations and Conclusion}
+\label{sec:conclusion}
+Unfortunately our neural models did not outperform the linear one significantly. 
+The linear model is already transparent by design, as the feature weights 
+represent directly the influence an input feature has on the result. As we mentioned in
+Section~\ref{sec:related_work}, linear models are already used as surrogate for more 
+complex models as they are comprehensible for humans. Thus, we did not do any work on 
+explainability as our linear model has good performance and could be used as a surrogate
+for  the deep neural ones.
+
+We were hoping to find patterns inside a post's text which lead to higher or lower
+reaction counts. As the  linear model only considered categorical features and scored
+similar performance, this was  not the case. 
+
+The overall higher error of the rtnews dataset can be explained with the dataset's score 
+distribution. Rtnews has a higher variance of their posts' score
+(Figure~\ref{fig:datasetstats-rtnews}) in comparison to the conspiracy theory group dataset
+(Figure~\ref{fig:datasetstats-groups}). 
+
+With only two peak score values as prediction (Figure~\ref{fig:dist-prediction-groups}),
+the  linear model almost performed as good as the neural ones. This could be circumvented
+by  a more balanced dataset with a uniform distribution of the post reactions count. The
+other aspect regarding the dataset is the selection of post sources. We decided to pick
+posts  from groups having conspiracy theories as their topic. The relation between score and 
+reaction count could behave different in groups or pages with other topics (e.g.
+politics).
+
+With the current setup, we could not proof a relation between a post's text and the number
+of reactions. There might be no relation at all but we would like to give an idea on what
+could still be tried but was not conducted due to time constraints. Facebook  groups
+consist of a heterogeneous mix of individuals and most of the posts might not get  much
+attention at all (Figure~\ref{fig:datasetstats-groups}). One approach could be to  focus
+more on Facebook pages. We only conducted this experiment on a single Facebook page. This
+path could lead to more promising results and is yet to be explored.
+
+% \begin{itemize}
+%     \item Summarize the insights we obtained
+%     \item Problems:
+%     \begin{itemize}
+%         \item Score variable may not be dependent on the post's text itself
+%         \item Unbalanced dataset
+%         \item Posts inside groups vary a lot (e.g. off-topic posts vs. viral topic)
+%     \end{itemize}
+
+% \end{itemize}

@@ -1,0 +1,46 @@
+%!TEX root = ../main.tex
+\section{Related Work}
+\label{sec:related_work}
+
+\citet{guidotti2018survey} gave a fundamental overview of the current research in XAI: 
+\emph{Model explanation} and \emph{outcome explanation} are two of four 
+categories defined by them. These are also know as
+\emph{global} and \emph{local} explainability. Approaches of the local category try to
+give an  instance-level explanation. Thus we only consider one or a small group of samples
+and reason about the model's classification for them. On the other hand, approaches which 
+belong to the global category try to explain the model as a whole, i.e. if we have several
+output categories, how does a typical input look like for one output category. All papers
+which were analyzed by \citet{guidotti2018survey} which fall into the outcome explanation
+category use  some kind of surrogate model. The surrogate is usually a simpler,
+human-comprehensible model  (e.g. a linear model or a decision tree), which tries to
+imitate the complex one. The  trade-off is the precision. All models in this category work
+on tabular data, except the one from \citet{krishnan2017palm} which is independent of the
+data's format. 
+
+\citet{Lundberg_2017} came up with an explainability framework based on Shapley values for 
+local explainability. In 2020 they proposed a new Shapley value based framework called
+SAGE for the model explanation problem~\citep{NEURIPS2020_c7bf0b7c}. While the first one
+could easily be applied to natural  language, the second one might not. For images, they
+combined several pixels to a so-called \emph{super pixel} in order to save computations, i.e.
+only the impact of a superpixel is  measured. One idea to use SAGE for  textual data
+could be to apply the same idea to text. While pixel at a certain location inside an image 
+might give a hint to a certain outcome, a word's position inside a text usually does not 
+have such an impact. Words or sentences are usually location independent. This means we 
+can not explain outcomes by just looking at the n-th word of a text. In regards of
+text a superpixel has to be represented by a fragment of text, e.g. a named entity or another closed 
+unit which is only dependent on whether it is included in the text at all rather than the 
+precision position of it inside the text.
+
+% \begin{itemize}
+%     \item Overview of global XAI methods which have been done so far \citep{guidotti2018survey} 
+%     \begin{itemize}
+%         \item short overview of different categories
+%         \item lack of explainability methods for text based data
+%     \end{itemize}
+%     \item SAGE \citep{NEURIPS2020_c7bf0b7c}
+%     \begin{itemize}
+%         \item Basic introduction of this paper
+%         \item Difficulties when using it for natural language
+%     \end{itemize}
+%     \item Brief summary of other papers which I had a look at (wiki) \dots 
+% \end{itemize}

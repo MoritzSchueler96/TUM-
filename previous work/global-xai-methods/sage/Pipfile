@@ -1,0 +1,17 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+sage-importance = "0.0.3"
+jupyter = "1.0.0"
+pytorch-lightning = "*"
+torch = "*"
+tensorboard = "*"
+
+[requires]
+python_version = "3.8"
+
+[pipenv]
+allow_prereleases = true

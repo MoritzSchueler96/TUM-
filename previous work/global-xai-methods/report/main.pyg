@@ -1,0 +1,4 @@
+        input_layer = model.get_layer('sentence_input').input
+        output_layer = model.get_layer('p_t').output
+        pred_fn = K.function([input_layer, K.learning_phase()], [output_layer])
+        aspect_probs = pred_fn([test_sentence, 0])
