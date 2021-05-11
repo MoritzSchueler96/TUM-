@@ -28,8 +28,8 @@ class GroupId2Name:
         df = pd.read_csv(filename, low_memory=False)
         self.group_id2name = {
             x[1]: x[0]
-            for x in df.drop_duplicates(subset=["Group Name", "Facebook Id"])[
-                ["Group Name", "Facebook Id"]
+            for x in df.drop_duplicates(subset=["Name", "Facebook Id"])[
+                ["Name", "Facebook Id"]
             ].values.tolist()
         }
 
@@ -184,6 +184,7 @@ class CrowdTangleDataModule(pl.LightningDataModule):
         self.trainset = None
         self.valset = None
         self.testset = None
+        self.vocab = []
         self.config = config
         # self.tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
         self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
@@ -297,6 +298,9 @@ class PlainCrowdTangleDataModule(pl.LightningDataModule):
             counter.update(self.tokenizer(features["Text"]))
         self.vocab = Vocab(counter, min_freq=self.config["vocab_min_freq"])
 
+    def _decode_vocab_vec(self):
+        a = 1
+
     def train_dataloader(self):
         return DataLoader(
             self.trainset,
@@ -321,4 +325,7 @@ class PlainCrowdTangleDataModule(pl.LightningDataModule):
             collate_fn=self.collator.collate,
             num_workers=self.num_workers,
         )
+
+    def get_tokenizer(self):
+        return self.tokenizer
 

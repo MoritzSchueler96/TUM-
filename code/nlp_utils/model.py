@@ -27,6 +27,9 @@ class BaseModel(pl.LightningModule):
         # setup layers
         self.bert = DistilBertModel.from_pretrained("distilbert-base-uncased")
 
+        if self.config["vocab_size"] == 0:
+            self.config["vocab_size"] = self.bert.config.vocab_size
+
         # freeze the encode, head layer will still be trainable
         for param in self.bert.parameters():
             param.requires_grad = False
