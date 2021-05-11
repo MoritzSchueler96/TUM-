@@ -329,3 +329,105 @@ class PlainCrowdTangleDataModule(pl.LightningDataModule):
     def get_tokenizer(self):
         return self.tokenizer
 
+
+class SemEvalDataset(Dataset):
+    def __init__(self, texts, labels):
+        self.texts = texts
+        self.labels = labels
+
+    def __getitem__(self, index):
+        return self.labels[index], self.texts[index]
+
+    def __len__(self):
+        return len(self.texts)
+
+
+def create_datasets(class_encoder, config={}):
+    """
+    creates a train, validation and test dataset.
+    The trainset will be shuffeled. 42 is used as random seed to get deterministic results.
+    """
+    config = create_config(config)
+
+    dirname = os.path.dirname(__file__)
+    filename = os.path.join(dirname, config["dataset_path"])
+    df = pd.read_csv(filename, low_memory=False)
+
+    raw_records = df.to_dict("records")
+    raw_labels = df[config["column_goldlabel"]].to_list()
+
+    # Split train / val_test date
+    X_train, X_val_test, y_train, y_val_test = train_test_split(
+        raw_records, raw_labels, test_size=0.4, random_state=42
+    )
+
+    # initialize encoder using training data
+    class_encoder.fit(list(get_classes_per_row(X_train, config)))
+
+    # Split validation / test set
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_val_test, y_val_test, test_size=0.5, random_state=42
+    )
+
+    return (
+        SemEvalDataset(X_train, y_train),
+        SemEvalDataset(X_val, y_val),
+        SemEvalDataset(X_test, y_test),
+    )
+
+
+class SemEvalDataModule(pl.LightningDataModule):
+    """
+    Data module for the DistilBERT based model + linear model
+    """
+
+    def __init__(self, num_workers=4, config={}):
+        super().__init__()
+        config = create_config(config)
+        self.batch_size = config["batch_size"]
+        self.num_workers = num_workers
+
+        self.collator = None
+        self.trainset = None
+        self.valset = None
+        self.testset = None
+        self.vocab = []
+        self.config = config
+        # self.tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
+        self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+        self.class_encoder = OneHotEncoder(handle_unknown="ignore", sparse=False)
+
+    def setup(self, stage):
+        if self.trainset is None:
+            self.collator = Collator(self.tokenizer, self.class_encoder, self.config)
+            self.trainset, self.valset, self.testset = create_datasets(
+                self.class_encoder, self.config
+            )
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.trainset,
+            shuffle=True,
+            batch_size=self.batch_size,
+            collate_fn=self.collator.collate,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.valset,
+            batch_size=self.batch_size,
+            collate_fn=self.collator.collate,
+            num_workers=self.num_workers,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.testset,
+            batch_size=self.batch_size,
+            collate_fn=self.collator.collate,
+            num_workers=self.num_workers,
+        )
+
+    def get_tokenizer(self):
+        return self.tokenizer
