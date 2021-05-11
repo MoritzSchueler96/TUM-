@@ -8,3 +8,6 @@ This project aims to explain classifiers that predict the potential impact and s
    conda env create
 2. Activate environment
    conda activate nlp
+3. Go into /code folder and install nlp_utils package
+   cd code/
+   pip install -e .
