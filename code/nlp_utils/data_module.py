@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import os
+from pathlib import Path
 from torch.utils.data import DataLoader, Subset, Dataset
 import torch
 from torch import nn
@@ -7,6 +8,7 @@ from transformers import AutoTokenizer, DistilBertTokenizer
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
+from sklearn import preprocessing
 from nlp_utils.config import create_config
 import tldextract
 
@@ -153,6 +155,7 @@ def create_datasets(class_encoder, config={}):
     X_train, X_val_test, y_train, y_val_test = train_test_split(
         raw_records, raw_labels, test_size=0.4, random_state=42
     )
+    # maybe zse torch.utils.data.random_split(range(10), [3, 7], generator=torch.Generator().manual_seed(42))
 
     # initialize encoder using training data
     class_encoder.fit(list(get_classes_per_row(X_train, config)))
@@ -298,9 +301,6 @@ class PlainCrowdTangleDataModule(pl.LightningDataModule):
             counter.update(self.tokenizer(features["Text"]))
         self.vocab = Vocab(counter, min_freq=self.config["vocab_min_freq"])
 
-    def _decode_vocab_vec(self):
-        a = 1
-
     def train_dataloader(self):
         return DataLoader(
             self.trainset,
@@ -330,19 +330,7 @@ class PlainCrowdTangleDataModule(pl.LightningDataModule):
         return self.tokenizer
 
 
-class SemEvalDataset(Dataset):
-    def __init__(self, texts, labels):
-        self.texts = texts
-        self.labels = labels
-
-    def __getitem__(self, index):
-        return self.labels[index], self.texts[index]
-
-    def __len__(self):
-        return len(self.texts)
-
-
-def create_datasets(class_encoder, config={}):
+def create_SemEval_datasets(config={}):
     """
     creates a train, validation and test dataset.
     The trainset will be shuffeled. 42 is used as random seed to get deterministic results.
@@ -361,9 +349,6 @@ def create_datasets(class_encoder, config={}):
         raw_records, raw_labels, test_size=0.4, random_state=42
     )
 
-    # initialize encoder using training data
-    class_encoder.fit(list(get_classes_per_row(X_train, config)))
-
     # Split validation / test set
     X_val, X_test, y_val, y_test = train_test_split(
         X_val_test, y_val_test, test_size=0.5, random_state=42
@@ -376,9 +361,62 @@ def create_datasets(class_encoder, config={}):
     )
 
 
+class SemEvalCollator:
+    """
+    helper class to transform a batch so it can be fed into the CustomDistilBERT based model
+    """
+
+    def __init__(self, tokenizer, label_encoder, config):
+        self.config = create_config(config)
+        self.tokenizer = tokenizer
+        self.label_encoder = label_encoder
+
+    def collate(self, batch):
+        labels, features = zip(*batch)
+
+        encoded_texts = self.tokenizer(
+            [row["Tweet"] for row in features],
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        )
+
+        """
+        for a single instance?
+        encoded_texts = self.tokenizer.encode_plus(
+            text,
+            None,
+            add_special_tokens=True,
+            max_length=self.max_len,
+            pad_to_max_length=True,
+            return_token_type_ids=True
+        )
+        """
+
+        labels = self.label_encoder.fit_transform(labels)
+
+        return (
+            torch.LongTensor(labels),
+            encoded_texts,
+            features,
+        )
+
+
+class SemEvalDataset(Dataset):
+    def __init__(self, texts, labels):
+        self.texts = texts
+        self.labels = labels
+
+    def __getitem__(self, index):
+        return self.labels[index], self.texts[index]
+
+    def __len__(self):
+        return len(self.texts)
+
+
 class SemEvalDataModule(pl.LightningDataModule):
     """
-    Data module for the DistilBERT based model + linear model
+    Data module for the CustomDistilBERT based model + linear model
     """
 
     def __init__(self, num_workers=4, config={}):
@@ -393,15 +431,49 @@ class SemEvalDataModule(pl.LightningDataModule):
         self.testset = None
         self.vocab = []
         self.config = config
-        # self.tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
+        self.label_encoder = preprocessing.LabelEncoder()
         self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
-        self.class_encoder = OneHotEncoder(handle_unknown="ignore", sparse=False)
 
-    def setup(self, stage):
+    def prepare_data(self, dataset_path=None, output_path=None):
+
+        if not dataset_path:
+            path = os.path.dirname(os.path.realpath(__file__))
+            dataset_path = os.path.join(
+                path, "../../data/raw/SemEval/stance/SemEval-stance.csv"
+            )
+            output_path = os.path.join(
+                path,
+                "../../data/processed/SemEval/stance/SemEval-stance_preprocessed.csv",
+            )
+        elif not output_path:
+            head, tail = os.path.split(dataset_path)
+            output_path = os.path.join(head, "processed", tail)
+
+        dataset_path = Path(dataset_path)
+        output_path = Path(output_path)
+
+        if not output_path.exists():
+            df = pd.read_csv(dataset_path, low_memory=False)
+            df.drop_duplicates(inplace=True)
+
+            unwanted_cols = []
+            df_filt = df.drop(unwanted_cols, axis=1)
+            df_filt = df_filt.rename(columns={})
+
+            # create directory and save data
+            head, _ = os.path.split(output_path)
+            os.makedirs(head)
+            df_filt.to_csv(output_path)
+
+        return output_path
+
+    def setup(self, stage: str = None):
         if self.trainset is None:
-            self.collator = Collator(self.tokenizer, self.class_encoder, self.config)
-            self.trainset, self.valset, self.testset = create_datasets(
-                self.class_encoder, self.config
+            self.collator = SemEvalCollator(
+                self.tokenizer, self.label_encoder, self.config
+            )
+            self.trainset, self.valset, self.testset = create_SemEval_datasets(
+                self.config
             )
 
     def train_dataloader(self):
