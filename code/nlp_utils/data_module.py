@@ -330,7 +330,7 @@ class PlainCrowdTangleDataModule(pl.LightningDataModule):
         return self.tokenizer
 
 
-def create_SemEval_datasets(config={}):
+def create_SemEval_datasets2(config={}):
     """
     creates a train, validation and test dataset.
     The trainset will be shuffeled. 42 is used as random seed to get deterministic results.
@@ -361,6 +361,79 @@ def create_SemEval_datasets(config={}):
     )
 
 
+import numpy as np
+
+
+def create_SemEval_datasets(config={}):
+    """
+    creates a train, validation and test dataset.
+    The trainset will be shuffeled. 42 is used as random seed to get deterministic results.
+    """
+
+    def clean_ascii(text):
+        # function to remove non-ASCII chars from data
+        return "".join(i for i in text if ord(i) < 128)
+
+    config = create_config(config)
+
+    dirname = os.path.dirname(__file__)
+    data_dir = "../../data/raw/SemEval/"
+
+    if config["dataset_path"]:
+        data_dir = os.path.join(dirname, config["dataset_path"])
+    else:
+        data_dir = os.path.join(dirname, data_dir)
+
+    path = Path(data_dir)
+    trainfile = "semeval2016-task6-trainingdata.txt"
+    testfile = "SemEval2016-Task6-subtaskA-testdata.txt"
+
+    df_train = pd.read_csv(
+        path / trainfile, delimiter="\t", header=0, encoding="latin-1"
+    )
+    df_test = pd.read_csv(path / testfile, delimiter="\t", header=0, encoding="latin-1")
+    df_train["Tweet"] = df_train["Tweet"].apply(clean_ascii)
+    df_test["Tweet"] = df_test["Tweet"].apply(clean_ascii)
+
+    stances = ["AGAINST", "FAVOR", "NONE", "UNKNOWN"]
+    class_nums = {s: i for i, s in enumerate(stances)}
+    X = df_train.Tweet.values
+    Y = np.array([class_nums[s] for s in df_train.Stance])
+    X_test = df_test.Tweet.values
+    y_test = np.array([-1 for s in df_test.Stance])
+
+    tr_text, va_text, tr_sent, va_sent = train_test_split(
+        X, Y, test_size=0.2, random_state=42
+    )
+    X_train = []
+    y_train = []
+    for t, s in zip(tr_text, tr_sent):
+        X_train.append(t)
+        y_train.append(s)
+
+    X_val = []
+    y_val = []
+    for t, s in zip(va_text, va_sent):
+        X_val.append(t)
+        y_val.append(s)
+    y_train = np.asarray(y_train, dtype=np.int32)
+    y_val = np.asarray(y_val, dtype=np.int32)
+
+    raw_records = df_train.to_dict("records")
+    raw_labels = df_train[config["column_goldlabel"]].to_list()
+
+    # Split train / val_test date
+    X_tr, X_va, y_tr, y_va = train_test_split(
+        raw_records, raw_labels, test_size=0.4, random_state=42
+    )
+
+    return (
+        SemEvalDataset(X_train, y_train),
+        SemEvalDataset(X_val, y_val),
+        SemEvalDataset(X_test, y_test),
+    )
+
+
 class SemEvalCollator:
     """
     helper class to transform a batch so it can be fed into the CustomDistilBERT based model
@@ -374,24 +447,21 @@ class SemEvalCollator:
     def collate(self, batch):
         labels, features = zip(*batch)
 
+        """
         encoded_texts = self.tokenizer(
             [row["Tweet"] for row in features],
             padding=True,
             truncation=True,
             return_tensors="pt",
         )
+        """
 
-        """
-        for a single instance?
-        encoded_texts = self.tokenizer.encode_plus(
-            text,
-            None,
-            add_special_tokens=True,
-            max_length=self.max_len,
-            pad_to_max_length=True,
-            return_token_type_ids=True
+        encoded_texts = self.tokenizer(
+            [row for row in features],
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
         )
-        """
 
         labels = self.label_encoder.fit_transform(labels)
 
@@ -434,7 +504,7 @@ class SemEvalDataModule(pl.LightningDataModule):
         self.label_encoder = preprocessing.LabelEncoder()
         self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
-    def prepare_data(self, dataset_path=None, output_path=None):
+    def prepare_data2(self, dataset_path=None, output_path=None):
 
         if not dataset_path:
             path = os.path.dirname(os.path.realpath(__file__))

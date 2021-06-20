@@ -6,6 +6,9 @@ import pytorch_lightning as pl
 from transformers import DistilBertModel, BertModel
 from nlp_utils.config import create_config
 import torchmetrics
+import os, subprocess
+import numpy as np
+import pandas as pd
 
 
 class BaseModel(pl.LightningModule):
@@ -230,15 +233,18 @@ class CustomDistilBertModel(pl.LightningModule):
         self.config = config
         self.save_hyperparameters(self.config)
         self.learning_rate = config["learning_rate"]
-        self.num_classes = 4
+        self.num_classes = 3
 
         self.train_metric = torchmetrics.F1(
-            num_classes=self.num_classes, average="macro"
+            num_classes=self.num_classes, average="micro"
         )
-        self.val_metric = torchmetrics.F1(num_classes=self.num_classes, average="macro")
+        self.val_metric = torchmetrics.F1(num_classes=self.num_classes, average="micro")
         self.test_metric = torchmetrics.F1(
-            num_classes=self.num_classes, average="macro"
+            num_classes=self.num_classes, average="micro"
         )
+
+        # save predictions from test_set
+        self.pred = np.empty(0, dtype="int64")
 
         # setup layers
         self.bert = DistilBertModel.from_pretrained("distilbert-base-uncased")
@@ -309,7 +315,7 @@ class CustomDistilBertModel(pl.LightningModule):
         loss = F.cross_entropy(y_hat, y)
         self.val_metric(pred, y)
 
-        self.log("val_loss", loss)
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
@@ -327,13 +333,71 @@ class CustomDistilBertModel(pl.LightningModule):
         y_hat = self(encoded_texts)
         pred = torch.argmax(y_hat, axis=1)
 
+        # create predictions array
+        pred2 = pred.detach().cpu().numpy()
+        self.pred = np.concatenate((self.pred, pred2), axis=None)
+
         loss = F.cross_entropy(y_hat, y)
         self.test_metric(pred, y)
 
-        self.log("test_loss", loss)
+        self.log("test_loss", loss, on_epoch=True, prog_bar=True, logger=True)
         return {"test_loss": loss}
 
     def test_epoch_end(self, outputs):
+        # save predictions to file and reset self.pred
+        predictions = self.pred
+        self.pred = pd.DataFrame()
+        path = os.path.dirname(__file__)
+        save_dir = "../../logs/StancePrediction_SemEval/predictions/version_"
+        # get number of last version
+        version = 3 + 1
+        save_dir = save_dir + str(version)
+        filename = "bert_stance.tsv"
+        pred_path = os.path.join(path, save_dir, filename)
+        os.makedirs(os.path.dirname(pred_path), exist_ok=True)
+        with open(pred_path, "w") as f:
+            f.write("{}\t{}\n".format("index", "prediction"))
+            for i, prediction in enumerate(predictions):
+                f.write("{}\t{}\n".format(i, prediction))
+
+        test_path = "../../data/raw/SemEval/SemEval2016-Task6-subtaskA-testdata.txt"
+        test_path = os.path.join(path, test_path)
+        test = pd.read_csv(test_path, delimiter="\t", header=0, encoding="latin-1")
+
+        def clean_ascii(text):
+            # function to remove non-ASCII chars from data
+            return "".join(i for i in text if ord(i) < 128)
+
+        test["Tweet"] = test["Tweet"].apply(clean_ascii)
+
+        pred = pd.DataFrame(data=predictions, columns=["prediction"])
+        pred.reset_index(level=0, inplace=True)
+        df = test.join(pred)
+        stances = ["AGAINST", "FAVOR", "NONE", "UNKNOWN"]
+        df["Stance"] = df["prediction"].apply(lambda i: stances[i])
+        df = df[
+            ["index", "Target", "Tweet", "Stance"]
+        ]  # maybe ID instead of index?, maybe index as its own column?
+        file = "bert_predictions.txt"
+        out_path = os.path.join(path, save_dir, file)
+
+        df.to_csv(
+            out_path, sep="\t", index=False, header=["ID", "Target", "Tweet", "Stance"]
+        )
+
+        os.chdir("../")
+
+        # execute eval pearl script
+        subprocess.call(
+            [
+                "perl",
+                "data/raw/SemEval/eval/eval.pl",
+                "data/raw/SemEval/eval/gold.txt",
+                "logs/StancePrediction_SemEval/predictions/version_4/bert_predictions.txt",
+            ]
+        )
+        os.chdir(path)
+
         self.log(
             "test_epoch_" + type(self.test_metric).__name__, self.test_metric.compute()
         )
