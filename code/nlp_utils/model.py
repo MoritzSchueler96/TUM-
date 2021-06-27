@@ -229,18 +229,34 @@ class CustomDistilBertModel(pl.LightningModule):
     def __init__(self, config={}):
 
         super().__init__()
-        config = create_config(config)
         self.config = config
         self.save_hyperparameters(self.config)
         self.learning_rate = config["learning_rate"]
-        self.num_classes = 3
+        self.stance_encoding = config["stance_encoding"]
+        self.target_encoding = config["target_encoding"]
+        self.num_classes_stance = 3
+        self.num_classes_target = 5
 
-        self.train_metric = torchmetrics.F1(
-            num_classes=self.num_classes, average="micro"
+        # metric for stance
+        self.train_metric_stance = torchmetrics.F1(
+            num_classes=self.num_classes_stance, average="micro"
         )
-        self.val_metric = torchmetrics.F1(num_classes=self.num_classes, average="micro")
-        self.test_metric = torchmetrics.F1(
-            num_classes=self.num_classes, average="micro"
+        self.val_metric_stance = torchmetrics.F1(
+            num_classes=self.num_classes_stance, average="micro"
+        )
+        self.test_metric_stance = torchmetrics.F1(
+            num_classes=self.num_classes_stance, average="micro"
+        )
+
+        # metric for target
+        self.train_metric_target = torchmetrics.F1(
+            num_classes=self.num_classes_target, average="micro"
+        )
+        self.val_metric_target = torchmetrics.F1(
+            num_classes=self.num_classes_target, average="micro"
+        )
+        self.test_metric_target = torchmetrics.F1(
+            num_classes=self.num_classes_target, average="micro"
         )
 
         # save predictions from test_set
@@ -257,14 +273,25 @@ class CustomDistilBertModel(pl.LightningModule):
             param.requires_grad = False
 
         # Model design
-        self.distilbert_tail = nn.Sequential(
+        self.distilbert_tail_stance = nn.Sequential(
+            nn.Linear(self.bert.config.dim, self.bert.config.dim),
+            nn.ReLU(),
+            nn.Dropout(self.bert.config.seq_classif_dropout),
+        )
+
+        self.distilbert_tail_target = nn.Sequential(
             nn.Linear(self.bert.config.dim, self.bert.config.dim),
             nn.ReLU(),
             nn.Dropout(self.bert.config.seq_classif_dropout),
         )
 
         # 768 bert hidden state shape + category_encoder_out
-        self.classifier = nn.Linear(self.bert.config.hidden_size, self.num_classes,)
+        self.classifier_stance = nn.Linear(
+            self.bert.config.hidden_size, self.num_classes_stance,
+        )
+        self.classifier_target = nn.Linear(
+            self.bert.config.hidden_size, self.num_classes_target,
+        )
 
     def forward(self, encoded_text):
         with torch.no_grad():
@@ -274,22 +301,26 @@ class CustomDistilBertModel(pl.LightningModule):
 
         hidden_state = bert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
-        pooled_output = self.distilbert_tail(pooled_output)
-        out = self.classifier(pooled_output)
-        return out  # torch.argmax(out, axis=1)
+        pooled_output_stance = self.distilbert_tail_stance(pooled_output)
+        pooled_output_target = self.distilbert_tail_stance(pooled_output)
+
+        out_stance = self.classifier_stance(pooled_output_stance)
+        out_target = self.classifier_target(pooled_output_target)
+        return (out_stance, out_target)
 
     def training_step(self, batch, batch_idx):
-        y, encoded_texts, _ = batch
-        y, encoded_texts = (
-            y.to(self.device),
-            encoded_texts.to(self.device),
-        )
+        y, encoded_texts = batch
+        y, encoded_texts = (y.to(self.device), encoded_texts.to(self.device))
 
         y_hat = self(encoded_texts)
-        pred = torch.argmax(y_hat, axis=1)
+        pred_stance = torch.argmax(y_hat[0], axis=1)
+        pred_target = torch.argmax(y_hat[1], axis=1)
 
-        loss = F.cross_entropy(y_hat, y)
-        self.train_metric(pred, y)
+        loss_stance = F.cross_entropy(y_hat[0], y[:, 0])
+        loss_target = F.cross_entropy(y_hat[1], y[:, 1])
+        loss = loss_stance + loss_target
+        self.train_metric_stance(pred_stance, y[:, 0])
+        self.train_metric_target(pred_target, y[:, 1])
 
         self.log(
             "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
@@ -298,47 +329,67 @@ class CustomDistilBertModel(pl.LightningModule):
 
     def training_epoch_end(self, outs):
         self.log(
-            "train_epoch_" + type(self.train_metric).__name__,
-            self.train_metric.compute(),
+            "train_epoch_stance_" + type(self.train_metric_stance).__name__,
+            self.train_metric_stance.compute(),
+        )
+        self.log(
+            "train_epoch_target_" + type(self.train_metric_target).__name__,
+            self.train_metric_target.compute(),
+        )
+        self.log(
+            "train_epoch_" + type(self.val_metric_target).__name__,
+            (self.train_metric_target.compute() + self.train_metric_stance.compute())
+            / 2,
         )
 
     def validation_step(self, batch, batch_idx):
-        y, encoded_texts, _ = batch
-        y, encoded_texts = (
-            y.to(self.device),
-            encoded_texts.to(self.device),
-        )
+        y, encoded_texts = batch
+        y, encoded_texts = (y.to(self.device), encoded_texts.to(self.device))
 
         y_hat = self(encoded_texts)
-        pred = torch.argmax(y_hat, axis=1)
+        pred_stance = torch.argmax(y_hat[0], axis=1)
+        pred_target = torch.argmax(y_hat[1], axis=1)
 
-        loss = F.cross_entropy(y_hat, y)
-        self.val_metric(pred, y)
+        loss_stance = F.cross_entropy(y_hat[0], y[:, 0])
+        loss_target = F.cross_entropy(y_hat[1], y[:, 1])
+        loss = loss_stance + loss_target
+        self.val_metric_stance(pred_stance, y[:, 0])
+        self.val_metric_target(pred_target, y[:, 1])
 
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
         self.log(
-            "val_epoch_" + type(self.val_metric).__name__, self.val_metric.compute()
+            "val_epoch_stance_" + type(self.val_metric_stance).__name__,
+            self.val_metric_stance.compute(),
+        )
+        self.log(
+            "val_epoch_target_" + type(self.val_metric_target).__name__,
+            self.val_metric_target.compute(),
+        )
+        self.log(
+            "val_epoch_" + type(self.val_metric_target).__name__,
+            (self.val_metric_target.compute() + self.val_metric_stance.compute()) / 2,
         )
 
     def test_step(self, batch, batch_idx):
-        y, encoded_texts, _ = batch
-        y, encoded_texts = (
-            y.to(self.device),
-            encoded_texts.to(self.device),
-        )
+        y, encoded_texts = batch
+        y, encoded_texts = (y.to(self.device), encoded_texts.to(self.device))
 
         y_hat = self(encoded_texts)
-        pred = torch.argmax(y_hat, axis=1)
+        pred_stance = torch.argmax(y_hat[0], axis=1)
+        pred_target = torch.argmax(y_hat[1], axis=1)
 
         # create predictions array
-        pred2 = pred.detach().cpu().numpy()
+        pred2 = pred_stance.detach().cpu().numpy()
         self.pred = np.concatenate((self.pred, pred2), axis=None)
 
-        loss = F.cross_entropy(y_hat, y)
-        self.test_metric(pred, y)
+        loss_stance = 0  # F.cross_entropy(y_hat[0], y[:, 0])
+        loss_target = F.cross_entropy(y_hat[1], y[:, 1])
+        loss = loss_stance + loss_target
+        # self.test_metric_stance(pred_stance, y[:, 0])
+        self.test_metric_target(pred_target, y[:, 1])
 
         self.log("test_loss", loss, on_epoch=True, prog_bar=True, logger=True)
         return {"test_loss": loss}
@@ -348,10 +399,19 @@ class CustomDistilBertModel(pl.LightningModule):
         predictions = self.pred
         self.pred = pd.DataFrame()
         path = os.path.dirname(__file__)
-        save_dir = "../../logs/StancePrediction_SemEval/predictions/version_"
+        save_dir = "../../logs/StancePrediction_SemEval/predictions/"
+        log_dir = "../../logs/StancePrediction_SemEval/lightning_logs/"
+        log_path = os.path.join(path, save_dir)
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
         # get number of last version
-        version = 3 + 1
-        save_dir = save_dir + str(version)
+        ver = os.listdir(os.path.join(path, log_dir))
+        ver.sort()
+        if ver:
+            version = int(ver[-1].split("_", 2)[-1])
+        else:
+            version = 0
+        save_dir = save_dir + "version_" + str(version)
         filename = "bert_stance.tsv"
         pred_path = os.path.join(path, save_dir, filename)
         os.makedirs(os.path.dirname(pred_path), exist_ok=True)
@@ -372,12 +432,10 @@ class CustomDistilBertModel(pl.LightningModule):
 
         pred = pd.DataFrame(data=predictions, columns=["prediction"])
         pred.reset_index(level=0, inplace=True)
-        df = test.join(pred)
-        stances = ["AGAINST", "FAVOR", "NONE", "UNKNOWN"]
-        df["Stance"] = df["prediction"].apply(lambda i: stances[i])
-        df = df[
-            ["index", "Target", "Tweet", "Stance"]
-        ]  # maybe ID instead of index?, maybe index as its own column?
+
+        test["Stance"] = np.array([self.stance_encoding[s] for s in pred.prediction])
+        test["index"] = test.index
+        df = test[["index", "Target", "Tweet", "Stance"]]
         file = "bert_predictions.txt"
         out_path = os.path.join(path, save_dir, file)
 
@@ -393,13 +451,20 @@ class CustomDistilBertModel(pl.LightningModule):
                 "perl",
                 "data/raw/SemEval/eval/eval.pl",
                 "data/raw/SemEval/eval/gold.txt",
-                "logs/StancePrediction_SemEval/predictions/version_4/bert_predictions.txt",
+                "logs/StancePrediction_SemEval/predictions/version_"
+                + str(version)
+                + "/bert_predictions.txt",
             ]
         )
         os.chdir(path)
 
         self.log(
-            "test_epoch_" + type(self.test_metric).__name__, self.test_metric.compute()
+            "test_epoch_target_" + type(self.test_metric_target).__name__,
+            self.test_metric_target.compute(),
+        )
+        self.log(
+            "test_epoch_" + type(self.test_metric_target).__name__,
+            self.test_metric_target.compute(),
         )
 
     def configure_optimizers(self):
