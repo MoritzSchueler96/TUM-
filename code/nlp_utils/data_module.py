@@ -11,6 +11,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn import preprocessing
 from nlp_utils.config import create_config
 import tldextract
+import numpy as np
 
 tld_extractor = tldextract.TLDExtract()
 from collections import Counter
@@ -330,40 +331,6 @@ class PlainCrowdTangleDataModule(pl.LightningDataModule):
         return self.tokenizer
 
 
-def create_SemEval_datasets2(config={}):
-    """
-    creates a train, validation and test dataset.
-    The trainset will be shuffeled. 42 is used as random seed to get deterministic results.
-    """
-    config = create_config(config)
-
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname, config["dataset_path"])
-    df = pd.read_csv(filename, low_memory=False)
-
-    raw_records = df.to_dict("records")
-    raw_labels = df[config["column_goldlabel"]].to_list()
-
-    # Split train / val_test date
-    X_train, X_val_test, y_train, y_val_test = train_test_split(
-        raw_records, raw_labels, test_size=0.4, random_state=42
-    )
-
-    # Split validation / test set
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_val_test, y_val_test, test_size=0.5, random_state=42
-    )
-
-    return (
-        SemEvalDataset(X_train, y_train),
-        SemEvalDataset(X_val, y_val),
-        SemEvalDataset(X_test, y_test),
-    )
-
-
-import numpy as np
-
-
 def create_SemEval_datasets(config={}):
     """
     creates a train, validation and test dataset.
@@ -373,8 +340,6 @@ def create_SemEval_datasets(config={}):
     def clean_ascii(text):
         # function to remove non-ASCII chars from data
         return "".join(i for i in text if ord(i) < 128)
-
-    config = create_config(config)
 
     dirname = os.path.dirname(__file__)
     data_dir = "../../data/raw/SemEval/"
@@ -396,38 +361,41 @@ def create_SemEval_datasets(config={}):
     df_test["Tweet"] = df_test["Tweet"].apply(clean_ascii)
 
     stances = ["AGAINST", "FAVOR", "NONE", "UNKNOWN"]
-    class_nums = {s: i for i, s in enumerate(stances)}
+    stance_dict = {s: i for i, s in enumerate(stances)}
+    inv_stance_dict = {i: s for i, s in enumerate(stances)}
+    targets = df_train.Target.unique()
+    target_dict = {s: i for i, s in enumerate(targets)}
+    inv_target_dict = {i: s for i, s in enumerate(targets)}
+
     X = df_train.Tweet.values
-    Y = np.array([class_nums[s] for s in df_train.Stance])
+    y_stance = df_train.Stance.values
+    y_target = df_train.Target.values
+
+    # convert into int
+    y_stance = np.array([stance_dict[s] for s in df_train.Stance])
+    y_target = np.array([target_dict[s] for s in df_train.Target])
+
     X_test = df_test.Tweet.values
-    y_test = np.array([-1 for s in df_test.Stance])
+    y_stance_test = np.array([stance_dict[s] for s in df_test.Stance])
+    y_target_test = np.array([target_dict[s] for s in df_test.Target])
+    y_test = (y_stance_test, y_target_test)
 
-    tr_text, va_text, tr_sent, va_sent = train_test_split(
-        X, Y, test_size=0.2, random_state=42
-    )
-    X_train = []
-    y_train = []
-    for t, s in zip(tr_text, tr_sent):
-        X_train.append(t)
-        y_train.append(s)
+    (
+        X_train,
+        X_val,
+        y_train_stance,
+        y_val_stance,
+        y_train_target,
+        y_val_target,
+    ) = train_test_split(X, y_stance, y_target, test_size=0.2, random_state=42)
 
-    X_val = []
-    y_val = []
-    for t, s in zip(va_text, va_sent):
-        X_val.append(t)
-        y_val.append(s)
-    y_train = np.asarray(y_train, dtype=np.int32)
-    y_val = np.asarray(y_val, dtype=np.int32)
-
-    raw_records = df_train.to_dict("records")
-    raw_labels = df_train[config["column_goldlabel"]].to_list()
-
-    # Split train / val_test date
-    X_tr, X_va, y_tr, y_va = train_test_split(
-        raw_records, raw_labels, test_size=0.4, random_state=42
-    )
+    # put in tuple
+    y_train = (y_train_stance, y_train_target)
+    y_val = (y_val_stance, y_val_target)
 
     return (
+        inv_stance_dict,
+        inv_target_dict,
         SemEvalDataset(X_train, y_train),
         SemEvalDataset(X_val, y_val),
         SemEvalDataset(X_test, y_test),
@@ -439,22 +407,11 @@ class SemEvalCollator:
     helper class to transform a batch so it can be fed into the CustomDistilBERT based model
     """
 
-    def __init__(self, tokenizer, label_encoder, config):
-        self.config = create_config(config)
+    def __init__(self, tokenizer):
         self.tokenizer = tokenizer
-        self.label_encoder = label_encoder
 
     def collate(self, batch):
         labels, features = zip(*batch)
-
-        """
-        encoded_texts = self.tokenizer(
-            [row["Tweet"] for row in features],
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-        )
-        """
 
         encoded_texts = self.tokenizer(
             [row for row in features],
@@ -463,12 +420,9 @@ class SemEvalCollator:
             return_tensors="pt",
         )
 
-        labels = self.label_encoder.fit_transform(labels)
-
         return (
             torch.LongTensor(labels),
             encoded_texts,
-            features,
         )
 
 
@@ -478,7 +432,7 @@ class SemEvalDataset(Dataset):
         self.labels = labels
 
     def __getitem__(self, index):
-        return self.labels[index], self.texts[index]
+        return (self.labels[0][index], self.labels[1][index]), self.texts[index]
 
     def __len__(self):
         return len(self.texts)
@@ -491,7 +445,6 @@ class SemEvalDataModule(pl.LightningDataModule):
 
     def __init__(self, num_workers=4, config={}):
         super().__init__()
-        config = create_config(config)
         self.batch_size = config["batch_size"]
         self.num_workers = num_workers
 
@@ -501,50 +454,21 @@ class SemEvalDataModule(pl.LightningDataModule):
         self.testset = None
         self.vocab = []
         self.config = config
-        self.label_encoder = preprocessing.LabelEncoder()
+        self.categories = []
+        self.stance_encoding = None
+        self.target_encoding = None
         self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
-
-    def prepare_data2(self, dataset_path=None, output_path=None):
-
-        if not dataset_path:
-            path = os.path.dirname(os.path.realpath(__file__))
-            dataset_path = os.path.join(
-                path, "../../data/raw/SemEval/stance/SemEval-stance.csv"
-            )
-            output_path = os.path.join(
-                path,
-                "../../data/processed/SemEval/stance/SemEval-stance_preprocessed.csv",
-            )
-        elif not output_path:
-            head, tail = os.path.split(dataset_path)
-            output_path = os.path.join(head, "processed", tail)
-
-        dataset_path = Path(dataset_path)
-        output_path = Path(output_path)
-
-        if not output_path.exists():
-            df = pd.read_csv(dataset_path, low_memory=False)
-            df.drop_duplicates(inplace=True)
-
-            unwanted_cols = []
-            df_filt = df.drop(unwanted_cols, axis=1)
-            df_filt = df_filt.rename(columns={})
-
-            # create directory and save data
-            head, _ = os.path.split(output_path)
-            os.makedirs(head)
-            df_filt.to_csv(output_path)
-
-        return output_path
 
     def setup(self, stage: str = None):
         if self.trainset is None:
-            self.collator = SemEvalCollator(
-                self.tokenizer, self.label_encoder, self.config
-            )
-            self.trainset, self.valset, self.testset = create_SemEval_datasets(
-                self.config
-            )
+            self.collator = SemEvalCollator(self.tokenizer)
+            (
+                self.stance_encoding,
+                self.target_encoding,
+                self.trainset,
+                self.valset,
+                self.testset,
+            ) = create_SemEval_datasets(self.config)
 
     def train_dataloader(self):
         return DataLoader(
