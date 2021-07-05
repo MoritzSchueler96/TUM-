@@ -9,6 +9,7 @@ import torchmetrics
 import os, subprocess
 import numpy as np
 import pandas as pd
+import re
 
 
 class BaseModel(pl.LightningModule):
@@ -287,10 +288,12 @@ class CustomDistilBertModel(pl.LightningModule):
 
         # 768 bert hidden state shape + category_encoder_out
         self.classifier_stance = nn.Linear(
-            self.bert.config.hidden_size, self.num_classes_stance,
+            self.bert.config.hidden_size,
+            self.num_classes_stance,
         )
         self.classifier_target = nn.Linear(
-            self.bert.config.hidden_size, self.num_classes_target,
+            self.bert.config.hidden_size,
+            self.num_classes_target,
         )
 
     def forward(self, encoded_text):
@@ -405,8 +408,14 @@ class CustomDistilBertModel(pl.LightningModule):
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
         # get number of last version
+        def atoi(text):
+            return int(text) if text.isdigit() else text
+
+        def natural_keys(text):
+            return [atoi(c) for c in re.split("(\d+)", text)]
+
         ver = os.listdir(os.path.join(path, log_dir))
-        ver.sort()
+        ver.sort(key=natural_keys)
         if ver:
             version = int(ver[-1].split("_", 2)[-1])
         else:
@@ -443,7 +452,8 @@ class CustomDistilBertModel(pl.LightningModule):
             out_path, sep="\t", index=False, header=["ID", "Target", "Tweet", "Stance"]
         )
 
-        os.chdir("../")
+        base_dir = os.path.join(path, "../..")
+        os.chdir(base_dir)
 
         # execute eval pearl script
         subprocess.call(
@@ -475,4 +485,3 @@ class CustomDistilBertModel(pl.LightningModule):
         )
         """
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-
