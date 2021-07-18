@@ -11,6 +11,108 @@ import numpy as np
 import pandas as pd
 import re
 
+class BasePartyModel(pl.LightningModule):
+    """
+    This is the DistilBERT based model. It only contains the party classifier and it is used for explanations.
+    """
+
+    def __init__(self, config={}):
+
+        super().__init__()
+        config = create_config(config)
+        self.config = config
+        self.save_hyperparameters(self.config)
+        self.learning_rate = config["learning_rate"]
+
+        self.train_metric = torchmetrics.MeanSquaredError()
+        self.val_metric = torchmetrics.MeanSquaredError()
+        self.test_metric = torchmetrics.MeanSquaredError()
+
+        # setup layers
+        self.bert = DistilBertModel.from_pretrained("distilbert-base-uncased")
+
+        if self.config["vocab_size"] == 0:
+            self.config["vocab_size"] = self.bert.config.vocab_size
+
+        # freeze the encode, head layer will still be trainable
+        for param in self.bert.parameters():
+            param.requires_grad = False
+
+        # Model design
+        self.distilbert_tail_party = nn.Sequential(
+            nn.Linear(self.bert.config.dim, self.bert.config.dim),
+            nn.ReLU(),
+            nn.Dropout(self.bert.config.seq_classif_dropout),
+        )
+
+        # 768 bert hidden state shape + category_encoder_out
+        self.party = nn.Linear(
+            self.bert.config.hidden_size, 1
+        )
+
+    def forward(self, input_ids, attention_mask):
+        bert_output = self.bert(
+            input_ids, attention_mask
+        )
+
+        hidden_state = bert_output[0]  # (bs, seq_len, dim)
+        pooled_output = hidden_state[:, 0]  # (bs, dim)
+        pooled_output = self.distilbert_tail_party(pooled_output)
+
+
+        out = self.party(pooled_output)
+        sig = nn.Sigmoid()
+        return sig(out)
+
+    def training_step(self, batch, batch_idx):
+        y, encoded_texts, category_vectors, _ = batch
+        y, encoded_texts, category_vectors = (
+            y.to(self.device),
+            encoded_texts.to(self.device),
+            category_vectors.to(self.device),
+        )
+
+        y_hat = self(encoded_texts["input_ids"], encoded_texts["attention_mask"])
+
+        loss = F.binary_cross_entropy(y_hat.view(-1), y.view(-1))
+        self.train_metric(y_hat, y.unsqueeze(1))
+
+        self.log(
+            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+        )
+        return {"loss": loss}
+
+    def training_epoch_end(self, outs):
+        self.log(
+            "train_epoch" + type(self.train_metric).__name__,
+            self.train_metric.compute(),
+        )
+
+    def validation_step(self, batch, batch_idx):
+        y, encoded_texts, category_vectors, _ = batch
+        y, encoded_texts, category_vectors = (
+            y.to(self.device),
+            encoded_texts.to(self.device),
+            category_vectors.to(self.device),
+        )
+
+        y_hat = self(encoded_texts["input_ids"], encoded_texts["attention_mask"])
+
+        loss = F.binary_cross_entropy(y_hat.view(-1), y.view(-1))
+        self.val_metric(y_hat, y.unsqueeze(1))
+
+        self.log("val_loss", loss)
+        return {"val_loss": loss}
+
+    def validation_epoch_end(self, outputs):
+        self.log(
+            "val_epoch_" + type(self.train_metric).__name__, self.val_metric.compute()
+        )
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        return optimizer
+
 
 class BaseModel(pl.LightningModule):
     """
