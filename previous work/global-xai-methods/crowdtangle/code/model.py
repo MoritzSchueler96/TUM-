@@ -175,3 +175,94 @@ class BiLSTMModel(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
+
+class BertCustomModelForShap(pl.LightningModule):
+    """
+    This is the DistilBERT based model. It's called "BaseModel" as I thought it would
+    be the only NN model we would make...
+    """
+
+    def __init__(self, config={}):
+
+        super().__init__()
+        config = create_config(config)
+        self.config = config
+        self.save_hyperparameters(self.config)
+        self.learning_rate = config["learning_rate"]
+
+        self.train_metric = pl.metrics.MeanSquaredError()
+        self.val_metric = pl.metrics.MeanSquaredError()
+        self.test_metric = pl.metrics.MeanSquaredError()
+        self.bce = nn.BCELoss()
+
+        # setup layers
+        self.bert = DistilBertModel.from_pretrained("distilbert-base-uncased")
+
+        if self.config["vocab_size"] == 0:
+            self.config["vocab_size"] = self.bert.config.vocab_size
+
+        # freeze the encode, head layer will still be trainable
+        for param in self.bert.parameters():
+            param.requires_grad = False
+
+        # Model design
+        self.distilbert_tail = nn.Sequential(
+            nn.Linear(self.bert.config.dim, self.bert.config.dim),
+            nn.ReLU(),
+            nn.Dropout(self.bert.config.seq_classif_dropout),
+        )
+
+        self.category_encoder = nn.Sequential(
+            nn.Linear(
+                config["category_encoded_length"], config["category_encoder_out"]
+            ),
+            nn.ReLU(),
+        )
+        # 768 bert hidden state shape + category_encoder_out
+        self.classifier = nn.Linear(
+            self.bert.config.hidden_size, 2
+        )
+
+        #sigmoid layer
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, encoded_text):
+        bert_output = self.bert(
+            encoded_text,None
+        )
+
+        hidden_state = bert_output[0]  # (bs, seq_len, dim)
+        pooled_output = hidden_state[:, 0]  # (bs, dim)
+        pooled_output = self.distilbert_tail(pooled_output)
+
+        # test = torch.cat((pooled_output, categories_encoded))
+
+        out = self.classifier(pooled_output)
+        out[:,0] = self.sigmoid(out[:,0])
+        out[:,1] = self.sigmoid(out[:,1])
+        torch.round(out)
+        out.to(torch.int64)
+        # out = self.output_layer(bert_output['pooler_output'])
+        return out
+
+    def training_step(self, batch, batch_idx):
+        y, encoded_texts, category_vectors, _ = batch
+        y, encoded_texts, category_vectors = (
+            y.to(self.device),
+            encoded_texts.to(self.device),
+            category_vectors.to(self.device),
+        )
+
+        out = self(encoded_texts["input_ids"])
+        score_hat = out[:,0]
+        class_hat = out[:,1]
+
+        loss1 = self.bce(score_hat, y[:,0])
+        # self.train_metric(score_hat, y[:,0])
+
+        loss2 = self.bce(class_hat,y[:,1])
+        loss =  loss2
+        self.log(
+            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+        )
+        return {"loss": loss}
