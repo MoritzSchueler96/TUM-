@@ -194,7 +194,7 @@ class CrowdTangleDataModule(pl.LightningDataModule):
         self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
         self.class_encoder = OneHotEncoder(handle_unknown="ignore", sparse=False)
 
-    def setup(self, stage):
+    def setup(self, stage = None):
         if self.trainset is None:
             self.collator = Collator(self.tokenizer, self.class_encoder, self.config)
             self.trainset, self.valset, self.testset = create_datasets(
