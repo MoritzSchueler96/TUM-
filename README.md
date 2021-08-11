@@ -3,6 +3,19 @@
 This project aims to explain classifiers that predict the potential impact and source of a social media post.
 Additionally we classify stance and provide global explanations for it as well.
 
+## Abstract
+
+In this age of social media we have a immense
+amount of data that these platforms can provide. It becomes extremely hard to find new
+and innovative ways to extract value from that
+data. In this paper we work on analyzing the
+impact, ideology and stance of several social
+media channels to enhance the understanding
+of opinions on social media. For this we collected our own dataset in the form of Facebook
+posts from CrowdTangle and also used the SemEval Stance dataset consisting of tweets with
+annotated sentiment and stance. Additionally
+we provide more insights into the model output by using several global eXplainable Artificial Intelligence (XAI) techniques. Specifically, we leverage SAGE and Neuron Attribution for global explainability.
+
 ## Structure
 
 Code: consists of a standard config, the data modules and the models
@@ -11,7 +24,7 @@ Data: consists of the raw data for our prediction tasks
 
 Logs: consists of Sage plots, clustered vocabularies and model parameters
 
-Important note, versioning of ray results and lightning_logs do match to ensure tensorboard logs and model checkpoints to be consistent. May lead to confusion because of missing version numbers for ray results
+_Important note, versioning of ray results, lightning_logs and predictions do match to ensure tensorboard logs and model checkpoints to be consistent. May lead to confusion because of missing version numbers for ray results or predictions._
 
 Presentation: consists of the final presentation of the project
 
