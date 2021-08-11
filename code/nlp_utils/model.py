@@ -490,10 +490,10 @@ class CustomDistilBertModel(pl.LightningModule):
         pred2 = pred_stance.detach().cpu().numpy()
         self.pred = np.concatenate((self.pred, pred2), axis=None)
 
-        loss_stance = F.cross_entropy(y_hat[0], y[:, 0])
+        # stance loss can't be calculated because test set has all stances set to 3, which is not a valid stance the model can predict
+        loss_stance = 0 # F.cross_entropy(y_hat[0], y[:, 0])
         loss_target = F.cross_entropy(y_hat[1], y[:, 1])
         loss = loss_stance + loss_target
-        self.test_metric_stance(pred_stance, y[:, 0])
         self.test_metric_target(pred_target, y[:, 1])
 
         self.log("test_loss", loss, on_epoch=True, prog_bar=True, logger=True)
