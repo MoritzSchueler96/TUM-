@@ -13,3 +13,8 @@ matplotlib==3.3.4
 notebook==6.3.0
 ipywidgets==7.6.3
 tqdm==4.60.0
+spacy==3.1.1
+nltk==3.6.2
+
+sage==0.0.0
+sage_importance==0.0.4
