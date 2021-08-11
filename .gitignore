@@ -135,4 +135,4 @@ dmypy.json
 ####     Add stuf below as needed      ####
 
 .key
-logs/
+logs/*/lightning_logs/*/checkpoints/
