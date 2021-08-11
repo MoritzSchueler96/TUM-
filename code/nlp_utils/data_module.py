@@ -232,8 +232,8 @@ class CrowdTangleDataModule(pl.LightningDataModule):
 
 class PlainCollator:
     """
-        helper class to transform a batch so it can be fed into the BiLSTM model
-        """
+    helper class to transform a batch so it can be fed into the BiLSTM model
+    """
 
     def __init__(self, vocab, tokenizer, class_encoder, config):
         self.config = create_config(config)
@@ -268,7 +268,7 @@ class PlainCollator:
 
 class PlainCrowdTangleDataModule(pl.LightningDataModule):
     """
-        Data module for the BiLSTM model
+    Data module for the BiLSTM model
     """
 
     def __init__(self, num_workers=4, config={}):
@@ -341,6 +341,7 @@ def create_SemEval_datasets(config={}):
         # function to remove non-ASCII chars from data
         return "".join(i for i in text if ord(i) < 128)
 
+    # default data directory
     dirname = os.path.dirname(__file__)
     data_dir = "../../data/raw/SemEval/"
 
@@ -353,6 +354,7 @@ def create_SemEval_datasets(config={}):
     trainfile = "semeval2016-task6-trainingdata.txt"
     testfile = "SemEval2016-Task6-subtaskA-testdata.txt"
 
+    # create train, test data
     df_train = pd.read_csv(
         path / trainfile, delimiter="\t", header=0, encoding="latin-1"
     )
@@ -360,6 +362,7 @@ def create_SemEval_datasets(config={}):
     df_train["Tweet"] = df_train["Tweet"].apply(clean_ascii)
     df_test["Tweet"] = df_test["Tweet"].apply(clean_ascii)
 
+    # encode classes
     stances = ["AGAINST", "FAVOR", "NONE", "UNKNOWN"]
     stance_dict = {s: i for i, s in enumerate(stances)}
     inv_stance_dict = {i: s for i, s in enumerate(stances)}
@@ -367,6 +370,7 @@ def create_SemEval_datasets(config={}):
     target_dict = {s: i for i, s in enumerate(targets)}
     inv_target_dict = {i: s for i, s in enumerate(targets)}
 
+    # select data
     X = df_train.Tweet.values
     y_stance = df_train.Stance.values
     y_target = df_train.Target.values
@@ -380,6 +384,7 @@ def create_SemEval_datasets(config={}):
     y_target_test = np.array([target_dict[s] for s in df_test.Target])
     y_test = (y_stance_test, y_target_test)
 
+    # create train and val split
     (
         X_train,
         X_val,

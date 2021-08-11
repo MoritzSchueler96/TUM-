@@ -362,7 +362,7 @@ class CustomDistilBertModel(pl.LightningModule):
             num_classes=self.num_classes_target, average="micro"
         )
 
-        # save predictions from test_set
+        # save predictions from test_set - needed for test script
         self.pred = np.empty(0, dtype="int64")
 
         # setup layers
@@ -371,11 +371,11 @@ class CustomDistilBertModel(pl.LightningModule):
         if self.config["vocab_size"] == 0:
             self.config["vocab_size"] = self.bert.config.vocab_size
 
-        # freeze the encode, head layer will still be trainable
+        # freeze the encoding, head layer will still be trainable
         for param in self.bert.parameters():
             param.requires_grad = False
 
-        # Model design
+        # Model design - two separate bert tails for the tasks for best performance
         self.distilbert_tail_stance = nn.Sequential(
             nn.Linear(self.bert.config.dim, self.bert.config.dim),
             nn.ReLU(),
@@ -388,7 +388,7 @@ class CustomDistilBertModel(pl.LightningModule):
             nn.Dropout(self.bert.config.seq_classif_dropout),
         )
 
-        # 768 bert hidden state shape + category_encoder_out
+        # 768 bert hidden state shape
         self.classifier_stance = nn.Linear(
             self.bert.config.hidden_size,
             self.num_classes_stance,
@@ -490,10 +490,10 @@ class CustomDistilBertModel(pl.LightningModule):
         pred2 = pred_stance.detach().cpu().numpy()
         self.pred = np.concatenate((self.pred, pred2), axis=None)
 
-        loss_stance = 0  # F.cross_entropy(y_hat[0], y[:, 0])
+        loss_stance = F.cross_entropy(y_hat[0], y[:, 0])
         loss_target = F.cross_entropy(y_hat[1], y[:, 1])
         loss = loss_stance + loss_target
-        # self.test_metric_stance(pred_stance, y[:, 0])
+        self.test_metric_stance(pred_stance, y[:, 0])
         self.test_metric_target(pred_target, y[:, 1])
 
         self.log("test_loss", loss, on_epoch=True, prog_bar=True, logger=True)
@@ -509,7 +509,7 @@ class CustomDistilBertModel(pl.LightningModule):
         log_path = os.path.join(path, save_dir)
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
-        # get number of last version
+        # get number of latest version
         def atoi(text):
             return int(text) if text.isdigit() else text
 
@@ -522,6 +522,8 @@ class CustomDistilBertModel(pl.LightningModule):
             version = int(ver[-1].split("_", 2)[-1])
         else:
             version = 0
+
+        # get save directory and write predictions to file
         save_dir = save_dir + "version_" + str(version)
         filename = "bert_stance.tsv"
         pred_path = os.path.join(path, save_dir, filename)
@@ -531,6 +533,7 @@ class CustomDistilBertModel(pl.LightningModule):
             for i, prediction in enumerate(predictions):
                 f.write("{}\t{}\n".format(i, prediction))
 
+        # read in test data and save to csv
         test_path = "../../data/raw/SemEval/SemEval2016-Task6-subtaskA-testdata.txt"
         test_path = os.path.join(path, test_path)
         test = pd.read_csv(test_path, delimiter="\t", header=0, encoding="latin-1")
@@ -557,7 +560,7 @@ class CustomDistilBertModel(pl.LightningModule):
         base_dir = os.path.join(path, "../..")
         os.chdir(base_dir)
 
-        # execute eval pearl script
+        # execute test pearl script
         subprocess.call(
             [
                 "perl",
@@ -580,10 +583,4 @@ class CustomDistilBertModel(pl.LightningModule):
         )
 
     def configure_optimizers(self):
-        # Make sure to filter the parameters based on `requires_grad`
-        """
-        return torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.parameters), lr=self.learning_rate
-        )
-        """
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)

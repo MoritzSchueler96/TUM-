@@ -18,8 +18,11 @@ from ray.tune.integration.pytorch_lightning import (
     TuneReportCheckpointCallback,
 )
 
+# set seed to get consistent results, deactivate if random results are wanted
 seed_everything(42)
 
+
+# get path of this file
 import os
 
 path = os.path.dirname(os.path.realpath(__file__))
@@ -66,6 +69,7 @@ callback = TuneReportCallback(
 )
 
 
+# training loop that tests out different hyperparameters and saves the results into the log folder
 def train_tune(config, callbacks, epochs=10, gpus=0):
     data_module = SemEvalDataModule(num_workers=4, config=config)
     data_module.setup("")
@@ -88,6 +92,7 @@ def train_tune(config, callbacks, epochs=10, gpus=0):
     trainer.test(model, datamodule=data_module)
 
 
+# config with radom sampling for learning rate and batch size
 config = {
     "dataset_path": "../../data/raw/SemEval/",
     "learning_rate": tune.sample_from(lambda: abs(random.gauss(1e-3, 1e-3))),
@@ -108,7 +113,7 @@ reporter = CLIReporter(
 
 # ray.init(local_mode=True, num_cpus=4, num_gpus=0)  # for debugging
 
-# get version
+# create versioning for multiple runs
 def atoi(text):
     return int(text) if text.isdigit() else text
 
@@ -127,6 +132,7 @@ if ver:
 else:
     version = 0
 
+# start hyperparameter optimization
 analysis = tune.run(
     tune.with_parameters(
         train_tune, callbacks=callbacks, epochs=config["epochs"], gpus=0
@@ -142,7 +148,7 @@ analysis = tune.run(
 )
 # metric="loss", mode="min", scheduler=scheduler, progress_reporter=reporter
 
-
+# get some information from the optimization
 best_trial = analysis.best_trial  # Get best trial
 best_config = analysis.best_config  # Get best trial's hyperparameters
 best_logdir = analysis.best_logdir  # Get best trial's logdir
@@ -161,57 +167,3 @@ df = analysis.dataframe(metric="loss", mode="min")
 print("Best hyperparameters found were: ", analysis.best_config)
 
 # save dataframe with results from hyperparameter search as csv?
-"""
-# do some SHAP stuff :D
-import shap
-import scipy as sp
-import torch
-
-# SHAP Tokenization Function, without attention mask
-def f_highest_prob_logit(x):
-    tv = torch.tensor(
-        [
-            tokenizer_auto.encode(
-                v, padding="max_length", max_length=sample_max_length, truncation=True
-            )
-            for v in x
-        ]
-    )  # .cuda()
-    outputs = model(tv)[0].detach().cpu().numpy()
-    scores = (np.exp(outputs).T / np.exp(outputs).sum(-1)).T
-    score_most_prob = [max(x) for x in scores]
-    # print(score_most_prob)
-    return sp.special.logit(score_most_prob)
-
-
-explainer = shap.Explainer(f_highest_prob_logit, tokenizer_auto)
-shap_values = explainer(ag_news_few_samples["text"], fixed_context=1)
-
-# true labels and predictions for reference
-print(ag_news_few_samples["label"])
-print(list(class_pred))
-shap.plots.text(shap_values[10])
-
-shap.plots.waterfall(shap_values[0])
-
-
-# visualize the first prediction's explanation with a force plot
-shap.initjs()
-shap.plots.force(shap_values[0])
-
-
-shap.initjs()
-# visualize all the training set predictions
-shap.plots.force(explainer.expected_value, shap_values.values)
-
-
-shap.initjs()
-# create a dependence scatter plot to show the effect of a single feature across the whole dataset
-shap.plots.scatter(shap_values[:, "RM"], color=shap_values)
-
-
-shap.initjs()
-# summarize the effects of all the features
-shap.plots.beeswarm(shap_values)
-
-"""
