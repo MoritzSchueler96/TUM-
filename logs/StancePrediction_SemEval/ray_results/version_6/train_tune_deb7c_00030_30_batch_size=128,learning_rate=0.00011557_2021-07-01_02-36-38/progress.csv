@@ -1,0 +1,2 @@
+loss,mean_F1,time_this_iter_s,done,timesteps_total,episodes_total,training_iteration,experiment_id,date,timestamp,time_total_s,pid,hostname,node_ip,time_since_restore,timesteps_since_restore,iterations_since_restore,trial_id
+2.557321786880493,0.3797313868999481,967.7648768424988,True,,,1,a9170f5a79ae4446956c71eb20972e67,2021-07-01_03-15-15,1625102115,967.7648768424988,207528,TP-X1-C7,192.168.178.28,967.7648768424988,0,1,deb7c_00030

@@ -1,0 +1,17 @@
+batch_size: 128
+dataset_path: ../../data/raw/SemEval/
+epochs: 20
+learning_rate: 0.0011016894089691334
+num_trials: 50
+stance_encoding:
+  0: AGAINST
+  1: FAVOR
+  2: NONE
+  3: UNKNOWN
+target_encoding:
+  0: Atheism
+  1: Climate Change is a Real Concern
+  2: Feminist Movement
+  3: Hillary Clinton
+  4: Legalization of Abortion
+vocab_size: 0

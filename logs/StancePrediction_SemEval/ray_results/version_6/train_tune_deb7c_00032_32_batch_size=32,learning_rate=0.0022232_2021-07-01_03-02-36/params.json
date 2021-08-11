@@ -1,0 +1,7 @@
+{
+  "batch_size": 32,
+  "dataset_path": "../../data/raw/SemEval/",
+  "epochs": 20,
+  "learning_rate": 0.0022231830631521078,
+  "num_trials": 50
+}
