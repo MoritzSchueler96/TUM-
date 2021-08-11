@@ -1,13 +1,24 @@
 # Global Explainability for understanding opinions on social media
 
 This project aims to explain classifiers that predict the potential impact and source of a social media post.
+Additionally we classify stance and provide global explanations for it as well.
+
+## Structure
+
+Code: consists of a standard config, the data modules and the models
+Data: consists of the raw data for our prediction tasks
+Logs: consists of Sage plots, clustered vocabularies and model checkpoints
+Presentation: consists of the final presentation of the project
+Report: consists of the final report of the project
+Previous work: consists of the repository of former students working on a similar task
+Tasks: Notebooks for training and analyzing the models designed for stance & impact prediction
 
 ## Installation
 
-1. Create a conda environment with Python 3.9
+1. Create a conda environment with Python 3.7
 
     ```python
-    conda create -n your-env-name python=3.9
+    conda create -n your-env-name python=3.7
     ```
 
 2. Activate your environment
