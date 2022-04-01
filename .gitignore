@@ -136,3 +136,4 @@ dmypy.json
 
 .key
 logs/*/lightning_logs/*/checkpoints/
+.pickle
